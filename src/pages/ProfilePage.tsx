@@ -1,14 +1,19 @@
+// src/pages/ProfilePage.tsx
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import supabase from '@/lib/supabase'
 import RecipeCard, { RecipeCardData } from '@/components/RecipeCard'
 import NotFound from '@/components/NotFound'
+import FollowButton from '@/components/FollowButton'
 
 type UserRow = {
     id: string
     display_name: string | null
     avatar_photo: string | null
     cover_photo?: string | null
+    follower_count: number
+    following_count: number
+    followed_by_me: boolean
 }
 
 export default function ProfilePage() {
@@ -17,54 +22,56 @@ export default function ProfilePage() {
     const [recipes, setRecipes] = useState<RecipeCardData[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [myId, setMyId] = useState<string | null>(null)
 
     useEffect(() => {
         let mounted = true
         if (!id) return
+
             ; (async () => {
                 try {
                     setLoading(true); setError(null)
 
-                    // Fetch user and their recipes in parallel
-                    const [uRes, rRes] = await Promise.all([
-                        supabase
-                            .from('users')
-                            .select('id,display_name,avatar_photo,cover_photo')
-                            .eq('id', id)
-                            .single<UserRow>(),
+                    // session (to know if viewing own profile)
+                    const { data: session } = await supabase.auth.getSession()
+                    const viewerId = session?.session?.user?.id ?? null
+                    if (mounted) setMyId(viewerId)
+
+                    // profile + follow state (single RPC)
+                    const [{ data: profileRows, error: pErr }, { data: recRows, error: rErr }] = await Promise.all([
+                        supabase.rpc('rpc_profile_view', { p_user_id: id }),
                         supabase
                             .from('recipes')
-                            .select(`
-              id, title, tags, created_at,
-              like_count, fork_count, version_count
-            `)
+                            .select('id, title, tags, created_at, like_count, fork_count, version_count')
                             .eq('user_id', id)
-                            .order('created_at', { ascending: false })
+                            .order('created_at', { ascending: false }),
                     ])
 
-                    if (uRes.error || !uRes.data) throw uRes.error ?? new Error('User not found')
-                    if (rRes.error) throw rRes.error
+                    if (pErr || !profileRows?.[0]) throw pErr ?? new Error('User not found')
+                    if (rErr) throw rErr
 
-                    // Reuse the same author object for all cards (owner’s profile)
+                    const u = profileRows[0] as UserRow
+
+                    // reuse same author for all cards
                     const authorForCards = {
-                        id: uRes.data.id,
-                        display_name: uRes.data.display_name ?? 'Unknown Chef',
-                        avatar_photo: uRes.data.avatar_photo ?? null,
+                        id: u.id,
+                        display_name: u.display_name ?? 'Unknown Chef',
+                        avatar_photo: u.avatar_photo ?? null,
                     }
 
-                    const rows = (rRes.data ?? []).map((rec: any) => ({
+                    const rows = (recRows ?? []).map((rec: any) => ({
                         id: rec.id,
                         title: rec.title,
                         tags: rec.tags ?? [],
                         created_at: rec.created_at,
-                        likeCount: rec.like_count ?? 0,      // ✅ denormalized
-                        // (optional) forkCount: rec.fork_count ?? 0,
-                        // (optional) versionCount: rec.version_count ?? 0,
+                        likeCount: rec.like_count ?? 0,
+                        // optionally: forkCount: rec.fork_count ?? 0,
+                        // optionally: versionCount: rec.version_count ?? 0,
                         author: authorForCards,
                     })) as RecipeCardData[]
 
                     if (!mounted) return
-                    setUser(uRes.data)
+                    setUser(u)
                     setRecipes(rows)
                 } catch (e: any) {
                     if (mounted) setError(e?.message ?? 'Failed to load profile')
@@ -72,6 +79,7 @@ export default function ProfilePage() {
                     if (mounted) setLoading(false)
                 }
             })()
+
         return () => { mounted = false }
     }, [id])
 
@@ -98,15 +106,17 @@ export default function ProfilePage() {
         )
     }
 
+    const isMe = !!myId && myId === user.id
+
     return (
         <div className="mx-auto max-w-5xl p-4">
-            {/* Header */}
             <div className="rounded-xl overflow-hidden border">
                 {user.cover_photo ? (
                     <img src={user.cover_photo} alt="" className="h-40 w-full object-cover" />
                 ) : (
                     <div className="h-40 w-full bg-gray-100" />
                 )}
+
                 <div className="p-4 flex items-center gap-3">
                     {user.avatar_photo ? (
                         <img
@@ -119,10 +129,23 @@ export default function ProfilePage() {
                             {(user.display_name ?? 'U').slice(0, 1)}
                         </div>
                     )}
-                    <div>
-                        <div className="text-lg font-semibold">{user.display_name ?? 'Chef'}</div>
-                        <div className="text-sm text-gray-500">Recipes • {recipes.length}</div>
+
+                    <div className="flex-1 min-w-0">
+                        <div className="text-lg font-semibold truncate">{user.display_name ?? 'Chef'}</div>
+                        <div className="mt-1 text-sm text-gray-600 flex items-center gap-3">
+                            <span>Followers {user.follower_count}</span>
+                            <span>Following {user.following_count}</span>
+                        </div>
                     </div>
+
+                    {/* Follow / Following */}
+                    {!isMe && (
+                        <FollowButton
+                            userId={user.id}
+                            initialFollowing={user.followed_by_me}
+                            initialFollowerCount={user.follower_count}
+                        />
+                    )}
                 </div>
             </div>
 

@@ -194,7 +194,19 @@ export default function ExplorePage() {
             <div className="mb-2 flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-bold">Explore Recipes</h1>
 
-                {/* Title search (no tag typing) */}
+                {/* Sort */}
+                <label className="ml-auto flex items-center gap-2 text-sm">
+                    <span className="text-gray-600">Sort</span>
+                    <select
+                        value={sort}
+                        onChange={(e) => setSort(e.target.value as SortMode)}
+                        className="border rounded px-2 py-1"
+                    >
+                        <option value="newest">Newest</option>
+                        <option value="liked">Most Liked</option>
+                    </select>
+                </label>
+
                 <div className="relative">
                     <input
                         ref={inputRef}
@@ -214,19 +226,6 @@ export default function ExplorePage() {
                         </button>
                     )}
                 </div>
-
-                {/* Sort */}
-                <label className="ml-auto flex items-center gap-2 text-sm">
-                    <span className="text-gray-600">Sort</span>
-                    <select
-                        value={sort}
-                        onChange={(e) => setSort(e.target.value as SortMode)}
-                        className="border rounded px-2 py-1"
-                    >
-                        <option value="newest">Newest</option>
-                        <option value="liked">Most Liked</option>
-                    </select>
-                </label>
 
                 <Link to="/recipes/new" className="text-sm bg-gray-900 text-white px-3 py-2 rounded hover:bg-gray-800">
                     New Recipe
@@ -288,7 +287,6 @@ export default function ExplorePage() {
                             <RecipeCard
                                 key={r.id}
                                 data={r}
-                                // Clicking a tag on a card adds it as a chip (full string, spaces allowed)
                                 onTagClick={(t) => addTagChip(t)}
                             />
                         ))}
