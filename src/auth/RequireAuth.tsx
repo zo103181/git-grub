@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 
 interface RequireAuthProps {
@@ -8,6 +8,7 @@ interface RequireAuthProps {
 
 export default function RequireAuth({ children }: RequireAuthProps) {
     const { authUser, loading } = useUser();
+    const loc = useLocation();
 
     if (loading) {
         return (
@@ -18,7 +19,7 @@ export default function RequireAuth({ children }: RequireAuthProps) {
     }
 
     if (!authUser) {
-        return <Navigate to="/" replace />;
+        return <Navigate to="/" replace state={{ from: loc.pathname + loc.search }} />
     }
 
     return <>{children}</>;

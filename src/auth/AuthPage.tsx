@@ -13,7 +13,7 @@ function AuthPage() {
 
     useEffect(() => {
         if (profile) {
-            navigate("/dashboard");
+            navigate("/recipes");
         }
     }, [profile, navigate]);
 

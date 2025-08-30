@@ -1,1 +1,10 @@
 @import "tailwindcss";
+
+@keyframes pop {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+.motion-safe\:animate-\[pop_140ms_ease-out\] {
+  animation: pop 140ms ease-out;
+}

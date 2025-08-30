@@ -39,7 +39,7 @@ export const mapBaseUserToPostgresUser = (user: BaseUser): Partial<PostgresUser>
 // Optional: Map ResponseUser back to PostgresUser (may be used for testing or mock data)
 export const mapResponseUserToPostgresUser = (user: ResponseUser): PostgresUser => {
     return {
-        user_id: user.userId,
+        id: user.userId,
         email: user.email,
         display_name: user.displayName,
         username: user.username,

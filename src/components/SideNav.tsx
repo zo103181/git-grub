@@ -1,24 +1,25 @@
-import { ComponentType, FC, SVGProps } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import {
-    HomeIcon
-} from '@heroicons/react/24/outline';
-import { classNames } from '../lib/utils/classNames';
-import { useProfileImages } from '@/hooks/useProfileImages';
-import { useUser } from '../context/UserContext';
-import { mapPostgresUserToResponseUser } from '@/mappers/userMappers';
+import { ComponentType, FC, SVGProps } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { classNames } from '@/lib/utils/classNames'
+import { useProfileImages } from '@/hooks/useProfileImages'
+import { useUser } from '@/context/UserContext'
+import { mapPostgresUserToResponseUser } from '@/mappers/userMappers'
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 
-interface NavItem { name: string; href: string; icon: ComponentType<SVGProps<SVGSVGElement>>; }
+interface NavItem { name: string; href: string; icon: ComponentType<SVGProps<SVGSVGElement>> }
 
 const navigation: NavItem[] = [
-    { name: 'Dashboard', href: '/dashboard', icon: HomeIcon }
-];
+    { name: 'Explore', href: '/recipes', icon: MagnifyingGlassIcon },
+]
 
 const SideNav: FC = () => {
-    const { authUser, profile } = useUser();
-    const { renderImage } = useProfileImages(mapPostgresUserToResponseUser(profile!));
-    const location = useLocation();
-    const navigate = useNavigate();
+    const { authUser, profile } = useUser()
+    const mapped = profile ? mapPostgresUserToResponseUser(profile) : null
+
+    const { renderImage } = useProfileImages(mapped)
+
+    const location = useLocation()
+    const navigate = useNavigate()
 
     return (
         <div className="flex h-full flex-col justify-between overflow-y-auto bg-gray-900 px-6 pb-2 hide-scrollbar">
@@ -36,7 +37,7 @@ const SideNav: FC = () => {
                 <nav className="mt-6">
                     <ul role="list" className="space-y-1">
                         {navigation.map(item => {
-                            const current = location.pathname === item.href;
+                            const current = location.pathname === item.href
                             return (
                                 <li key={item.name}>
                                     <button
@@ -50,30 +51,30 @@ const SideNav: FC = () => {
                                         <span className="flex-1 text-left">{item.name}</span>
                                     </button>
                                 </li>
-                            );
+                            )
                         })}
                     </ul>
                 </nav>
             </div>
 
-            {/* User profile footer */}
-            {profile && (
+            {/* User profile footer (render only if signed in + profile loaded) */}
+            {authUser && profile && (
                 <button
-                    onClick={() => { navigate('/settings') }}
+                    onClick={() => navigate('/settings')}
                     className="flex w-full items-center gap-x-4 px-2 py-3 text-sm font-semibold text-white hover:bg-gray-800 rounded-md cursor-pointer"
                 >
                     {renderImage(
-                        profile.avatar_photo,
+                        profile.avatar_photo ?? null,
                         'avatarPhoto',
                         'h-10 w-10 text-sm rounded-full ring-2 ring-white'
                     )}
                     <span className="flex-1 text-left truncate">
-                        {profile.display_name || authUser?.email}
+                        {profile.display_name || authUser.email}
                     </span>
                 </button>
             )}
         </div>
-    );
-};
+    )
+}
 
-export default SideNav;
+export default SideNav
