@@ -1,59 +1,45 @@
 import { useState } from 'react'
 import supabase from '@/lib/supabase'
+import { useUser } from '@/context/UserContext'
 
 export default function FollowButton({
     userId,
     initialFollowing,
-    initialFollowerCount,
     className = '',
-    compact = false,
     disabledReason,
+    onToggle
 }: {
     userId: string
     initialFollowing: boolean
-    initialFollowerCount: number
     className?: string
-    compact?: boolean
     disabledReason?: string
+    onToggle?: (nextFollowing: boolean) => void
 }) {
+    const { profile } = useUser()
+    const viewerId = profile?.id
     const [following, setFollowing] = useState(initialFollowing)
-    const [count, setCount] = useState(initialFollowerCount)
     const [busy, setBusy] = useState(false)
 
     const toggle = async () => {
-        if (busy) return
-        setBusy(true)
-
-        // optimistic
         const next = !following
         setFollowing(next)
-        setCount(c => c + (next ? 1 : -1))
 
         try {
-            const { data } = await supabase.auth.getSession()
-            if (!data.session) throw new Error('Sign in required')
-
-            const { data: res, error } = await supabase.rpc('rpc_follow_toggle', {
-                p_followee: userId,
-            })
-            if (error) throw error
-
-            // trust server truth (handles race conditions)
-            if (Array.isArray(res) && res[0]) {
-                setFollowing(res[0].following)
-                setCount(res[0].follower_count ?? 0)
+            if (next) {
+                const { error } = await supabase.from('follows').insert({ follower_id: viewerId, followee_id: userId })
+                if (error) throw error
+            } else {
+                const { error } = await supabase.from('follows')
+                    .delete()
+                    .eq('follower_id', viewerId)
+                    .eq('followee_id', userId)
+                if (error) throw error
             }
-        } catch (e: any) {
-            // rollback on failure
-            setFollowing(following)
-            setCount(c => c + (following ? 0 : 0))
-            alert(e.message ?? 'Failed to update follow')
-        } finally {
-            setBusy(false)
+            onToggle?.(next)
+        } catch (e) {
+            setFollowing(!next)
         }
     }
-
-    const label = following ? 'Following' : 'Follow'
 
     return (
         <button
@@ -61,16 +47,16 @@ export default function FollowButton({
             disabled={busy || !!disabledReason}
             title={disabledReason}
             className={[
-                'flex items-center gap-2 text-sm px-3 py-2 rounded border transition hover:bg-gray-50 active:scale-[0.98] disabled:opacity-60',
-                compact ? 'text-xs px-2 py-1' : '',
+                'cursor-pointer inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition',
+                following
+                    ? 'bg-gray-200 text-gray-800 hover:bg-gray-300' // Unfollow = neutral
+                    : 'bg-blue-600 text-white hover:bg-blue-700',   // Follow = primary
+                busy || disabledReason ? 'opacity-60 cursor-not-allowed' : '',
                 className,
             ].join(' ')}
             aria-pressed={following}
-            aria-label={label}
         >
-            <span>{label}</span>
-            <span className="text-gray-500">•</span>
-            <span className="tabular-nums">{count}</span>
+            {following ? 'Unfollow' : 'Follow'}
         </button>
     )
 }

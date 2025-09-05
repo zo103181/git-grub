@@ -1,10 +1,10 @@
-// src/pages/ProfilePage.tsx
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import supabase from '@/lib/supabase'
 import RecipeCard, { RecipeCardData } from '@/components/RecipeCard'
 import NotFound from '@/components/NotFound'
 import FollowButton from '@/components/FollowButton'
+import { useUser } from '@/context/UserContext'
 
 type UserRow = {
     id: string
@@ -18,11 +18,13 @@ type UserRow = {
 
 export default function ProfilePage() {
     const { id } = useParams<{ id: string }>()
+    const { profile } = useUser() // viewer (if signed-in)
     const [user, setUser] = useState<UserRow | null>(null)
     const [recipes, setRecipes] = useState<RecipeCardData[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [myId, setMyId] = useState<string | null>(null)
+
+    const isMe = !!profile?.id && !!user?.id && profile.id === user.id
 
     useEffect(() => {
         let mounted = true
@@ -32,12 +34,7 @@ export default function ProfilePage() {
                 try {
                     setLoading(true); setError(null)
 
-                    // session (to know if viewing own profile)
-                    const { data: session } = await supabase.auth.getSession()
-                    const viewerId = session?.session?.user?.id ?? null
-                    if (mounted) setMyId(viewerId)
-
-                    // profile + follow state (single RPC)
+                    // Single RPC for profile (includes follower_count, following_count, followed_by_me)
                     const [{ data: profileRows, error: pErr }, { data: recRows, error: rErr }] = await Promise.all([
                         supabase.rpc('rpc_profile_view', { p_user_id: id }),
                         supabase
@@ -51,8 +48,6 @@ export default function ProfilePage() {
                     if (rErr) throw rErr
 
                     const u = profileRows[0] as UserRow
-
-                    // reuse same author for all cards
                     const authorForCards = {
                         id: u.id,
                         display_name: u.display_name ?? 'Unknown Chef',
@@ -65,8 +60,6 @@ export default function ProfilePage() {
                         tags: rec.tags ?? [],
                         created_at: rec.created_at,
                         likeCount: rec.like_count ?? 0,
-                        // optionally: forkCount: rec.fork_count ?? 0,
-                        // optionally: versionCount: rec.version_count ?? 0,
                         author: authorForCards,
                     })) as RecipeCardData[]
 
@@ -82,6 +75,18 @@ export default function ProfilePage() {
 
         return () => { mounted = false }
     }, [id])
+
+    const handleFollowToggle = (nextFollowing: boolean) => {
+        setUser((u) => {
+            if (!u) return u
+            const delta = nextFollowing ? 1 : -1
+            return {
+                ...u,
+                followed_by_me: nextFollowing,
+                follower_count: Math.max(0, (u.follower_count ?? 0) + delta),
+            }
+        })
+    }
 
     if (loading) {
         return (
@@ -106,50 +111,159 @@ export default function ProfilePage() {
         )
     }
 
-    const isMe = !!myId && myId === user.id
-
     return (
         <div className="mx-auto max-w-5xl p-4">
-            <div className="rounded-xl overflow-hidden border">
+            <section className="rounded-2xl overflow-hidden border bg-white">
+                {/* Cover */}
+                <div className="relative h-44 sm:h-56 lg:h-64 bg-gray-100">
+                    {user.cover_photo ? (
+                        <img
+                            src={user.cover_photo}
+                            alt=""
+                            className="h-full w-full object-cover"
+                        />
+                    ) : null}
+
+                    {/* Primary action on cover (right) */}
+                    {!isMe && (
+                        <div className="absolute right-3 bottom-3 hidden sm:block">
+                            <FollowButton
+                                userId={user.id}
+                                initialFollowing={user.followed_by_me}
+                                onToggle={handleFollowToggle}
+                                className="shadow-lg"
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {/* Bottom card with avatar overlapping */}
+                <div className="relative px-4 sm:px-6 pb-5">
+                    {/* Avatar (centered) */}
+                    <div className="absolute left-1/2 -top-10 -translate-x-1/2">
+                        {user.avatar_photo ? (
+                            <img
+                                src={user.avatar_photo}
+                                alt={user.display_name ?? 'User'}
+                                className="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover ring-4 ring-white shadow-md"
+                            />
+                        ) : (
+                            <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-full bg-gray-200 ring-4 ring-white shadow-md grid place-items-center text-2xl">
+                                {(user.display_name ?? 'U').slice(0, 1)}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Name + meta */}
+                    <div className="pt-14 sm:pt-16 text-center">
+                        <h1 className="text-xl sm:text-2xl font-semibold truncate">
+                            {user.display_name ?? 'Chef'}
+                        </h1>
+
+                        <p className="mt-1 text-sm text-gray-500 truncate">Slogan Here</p>
+                    </div>
+
+                    {/* Stats row */}
+                    <div className="mt-4 flex items-center justify-center gap-6 sm:gap-10 text-sm">
+                        <div className="text-center">
+                            <div className="font-semibold">{recipes.length}</div>
+                            <div className="uppercase tracking-wide text-gray-500 text-[11px]">Posts</div>
+                        </div>
+                        <div className="h-6 w-px bg-gray-200 hidden sm:block" />
+                        <div className="text-center">
+                            <div className="font-semibold">{user.follower_count}</div>
+                            <div className="uppercase tracking-wide text-gray-500 text-[11px]">Followers</div>
+                        </div>
+                        <div className="h-6 w-px bg-gray-200 hidden sm:block" />
+                        <div className="text-center">
+                            <div className="font-semibold">{user.following_count}</div>
+                            <div className="uppercase tracking-wide text-gray-500 text-[11px]">Following</div>
+                        </div>
+                    </div>
+
+                    {/* Mobile action (stacked under stats) */}
+                    {!isMe && (
+                        <div className="mt-4 sm:hidden flex justify-center">
+                            <FollowButton
+                                userId={user.id}
+                                initialFollowing={user.followed_by_me}
+                                onToggle={handleFollowToggle}
+                                className="w-full max-w-xs"
+                            />
+                        </div>
+                    )}
+
+                    {/* Optional social icons row (placeholders) */}
+                    {/* <div className="mt-4 flex justify-center gap-3 text-gray-500">
+      <button className="p-2 rounded-full hover:bg-gray-100"><IconFb /></button>
+      <button className="p-2 rounded-full hover:bg-gray-100"><IconX /></button>
+      <button className="p-2 rounded-full hover:bg-gray-100"><IconIg /></button>
+    </div> */}
+                </div>
+            </section>
+
+            {/* Profile header (Instagram-style) */}
+            <div className="rounded-xl overflow-hidden border bg-white">
+                {/* Banner */}
                 {user.cover_photo ? (
                     <img src={user.cover_photo} alt="" className="h-40 w-full object-cover" />
                 ) : (
                     <div className="h-40 w-full bg-gray-100" />
                 )}
 
-                <div className="p-4 flex items-center gap-3">
-                    {user.avatar_photo ? (
-                        <img
-                            src={user.avatar_photo}
-                            alt={user.display_name ?? 'User'}
-                            className="h-14 w-14 rounded-full object-cover -mt-10 border-2 border-white"
-                        />
-                    ) : (
-                        <div className="h-14 w-14 rounded-full bg-gray-200 -mt-10 border-2 border-white flex items-center justify-center">
-                            {(user.display_name ?? 'U').slice(0, 1)}
-                        </div>
-                    )}
+                {/* Avatar + name + follow + counts */}
+                <div className="px-4 pb-4">
+                    <div className="-mt-10 flex items-center gap-4">
+                        {user.avatar_photo ? (
+                            <img
+                                src={user.avatar_photo}
+                                alt={user.display_name ?? 'User'}
+                                className="h-20 w-20 rounded-full object-cover ring-2 ring-white"
+                            />
+                        ) : (
+                            <div className="h-20 w-20 rounded-full bg-gray-200 ring-2 ring-white flex items-center justify-center text-xl">
+                                {(user.display_name ?? 'U').slice(0, 1)}
+                            </div>
+                        )}
 
-                    <div className="flex-1 min-w-0">
-                        <div className="text-lg font-semibold truncate">{user.display_name ?? 'Chef'}</div>
-                        <div className="mt-1 text-sm text-gray-600 flex items-center gap-3">
-                            <span>Followers {user.follower_count}</span>
-                            <span>Following {user.following_count}</span>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                <div className="text-xl font-semibold truncate">
+                                    {user.display_name ?? 'Chef'}
+                                </div>
+                                {!isMe && (
+                                    <FollowButton
+                                        userId={user.id}
+                                        initialFollowing={user.followed_by_me}
+                                        className="sm:ml-3"
+                                        onToggle={handleFollowToggle}
+                                    />
+                                )}
+                            </div>
+
+                            {/* Counts row */}
+                            <div className="mt-4 flex items-center gap-6 text-sm text-gray-700">
+                                <div className="text-center">
+                                    <div className="font-semibold">{recipes.length}</div>
+                                    <div className="uppercase tracking-wide text-gray-500 text-[11px]">Posts</div>
+                                </div>
+                                <div className="h-6 w-px bg-gray-200 hidden sm:block" />
+                                <div className="text-center">
+                                    <div className="font-semibold">{user.follower_count}</div>
+                                    <div className="uppercase tracking-wide text-gray-500 text-[11px]">Followers</div>
+                                </div>
+                                <div className="h-6 w-px bg-gray-200 hidden sm:block" />
+                                <div className="text-center">
+                                    <div className="font-semibold">{user.following_count}</div>
+                                    <div className="uppercase tracking-wide text-gray-500 text-[11px]">Following</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                    {/* Follow / Following */}
-                    {!isMe && (
-                        <FollowButton
-                            userId={user.id}
-                            initialFollowing={user.followed_by_me}
-                            initialFollowerCount={user.follower_count}
-                        />
-                    )}
                 </div>
             </div>
 
-            {/* Grid */}
+            {/* Grid of recipes */}
             {recipes.length === 0 ? (
                 <div className="mt-6 text-gray-700">No recipes yet.</div>
             ) : (

@@ -9,7 +9,7 @@ import RecipeActions from '@/components/RecipeActions'
 export default function RecipeDetail() {
     const { id } = useParams<{ id: string }>()
     const { data, isLoading, error } = useRecipeDetail(id)
-    const { profile } = useUser() // avoid extra auth.getSession() read
+    const { profile } = useUser()
 
     const recipe = data?.recipe
     // normalize in case SQL returned latestversion (lowercase V)
@@ -87,9 +87,7 @@ export default function RecipeDetail() {
 
                         <span className="text-gray-300">•</span>
 
-                        <span className="text-xs text-gray-500">
-                            {versionStamp}
-                        </span>
+                        <span className="text-xs text-gray-500">{versionStamp}</span>
 
                         <span className="text-gray-300">•</span>
 
